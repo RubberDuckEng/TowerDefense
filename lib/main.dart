@@ -67,13 +67,13 @@ class Objective extends RectangleComponent {
   Objective() {
     width = 20;
     height = 20;
-    add(RectangleHitbox());
+    add(CircleHitbox());
   }
 
   @override
   void render(Canvas canvas) {
     super.render(canvas);
-    canvas.drawRect(size.toRect(), _paint);
+    canvas.drawCircle(Offset.zero, width / 2, _paint);
   }
 }
 
@@ -83,13 +83,13 @@ class Attacker extends RectangleComponent {
   Attacker() {
     width = 10;
     height = 10;
-    add(RectangleHitbox());
+    add(CircleHitbox());
   }
 
   @override
   void render(Canvas canvas) {
     super.render(canvas);
-    canvas.drawRect(size.toRect(), _paint);
+    canvas.drawCircle(Offset.zero, width / 2, _paint);
   }
 }
 
