@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/collisions.dart';
+import 'package:flame/extensions.dart';
+
+import 'package:a_star_algorithm/a_star_algorithm.dart';
 
 void main() {
   runApp(const MyApp());
@@ -98,6 +101,9 @@ class Attacker extends RectangleComponent with HasGameRef<GameState> {
 
   final double _speed = 5.0;
 
+  double closeEnough = 0.1;
+  List<Offset> waypoints = [];
+
   Attacker() {
     width = 1;
     height = 1;
@@ -105,9 +111,35 @@ class Attacker extends RectangleComponent with HasGameRef<GameState> {
   }
 
   @override
+  void onMount() {
+    moveTo(gameRef.objective.center.toOffset());
+  }
+
+  void moveTo(Offset target) {
+    waypoints = gameRef.grid.findPath(center.toOffset(), target).toList();
+  }
+
+  Vector2? getNextWaypoint() {
+    if (waypoints.isEmpty) {
+      return null;
+    }
+    return waypoints.first.toVector2();
+  }
+
+  @override
   void update(double dt) {
-    final objective = gameRef.objective;
-    final delta = objective.center - center;
+    var objective = getNextWaypoint();
+    if (objective == null) {
+      return;
+    }
+    if (center.distanceTo(objective) < closeEnough) {
+      waypoints.removeAt(0);
+      objective = getNextWaypoint();
+      if (objective == null) {
+        return;
+      }
+    }
+    final delta = objective - center;
     center += delta.normalized() * _speed * dt;
   }
 
@@ -144,13 +176,23 @@ IRect getBoundingIntegerRect(Rect rect) {
 class NavGrid {
   static const worldSize = ISize(100, 100);
 
-  final _passable = Grid<bool>.filled(worldSize, (position) => true);
+  final _barriers = Set<GridPosition>();
+
+  Iterable<Offset> findPath(Offset start, Offset end) {
+    return AStar(
+      rows: worldSize.width,
+      columns: worldSize.height,
+      start: start,
+      end: end,
+      barriers: _barriers.map<Offset>((cell) => cell.toOffset()).toList(),
+    ).findThePath();
+  }
 
   void markNotPassable(Rect bounds) {
     final rect = getBoundingIntegerRect(bounds);
     for (var x = rect.left; x <= rect.right; ++x) {
       for (var y = rect.top; y <= rect.bottom; ++y) {
-        _passable.set(GridPosition(x, y), false);
+        _barriers.add(GridPosition(x, y));
       }
     }
   }
@@ -163,6 +205,8 @@ class GridPosition {
   const GridPosition(this.x, this.y);
 
   static const zero = GridPosition(0, 0);
+
+  Offset toOffset() => Offset(x.toDouble(), y.toDouble());
 
   @override
   bool operator ==(other) {
