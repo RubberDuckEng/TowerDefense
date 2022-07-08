@@ -6,7 +6,7 @@ import 'package:flame/game.dart';
 import 'package:flame/collisions.dart';
 import 'package:flame/extensions.dart';
 
-import 'package:a_star_algorithm/a_star_algorithm.dart';
+import 'package:a_star/a_star.dart';
 
 void main() {
   runApp(const MyApp());
@@ -80,13 +80,20 @@ class Objective extends RectangleComponent {
   }
 }
 
-class Barrier extends RectangleComponent {
+class Barrier extends RectangleComponent with HasGameRef<GameState> {
   static final _paint = Paint()..color = Colors.blue.shade400;
 
   Barrier() {
     width = 2;
     height = 2;
     add(RectangleHitbox());
+  }
+
+  @override
+  void onMount() {
+    super.onMount();
+    gameRef.grid
+        .markNotPassable(Rect.fromLTWH(position.x, position.y, size.x, size.y));
   }
 
   @override
@@ -162,6 +169,11 @@ class IRect {
     required this.top,
     required this.bottom,
   });
+
+  @override
+  String toString() {
+    return "[$left, $right, $top, $bottom]";
+  }
 }
 
 IRect getBoundingIntegerRect(Rect rect) {
@@ -173,26 +185,91 @@ IRect getBoundingIntegerRect(Rect rect) {
   );
 }
 
+class TerrainTile extends Object with Node<TerrainTile> {
+  final int x;
+  final int y;
+
+  TerrainTile(this.x, this.y);
+
+  TerrainTile.fromOffset(Offset offset)
+      : x = offset.dx.floor(),
+        y = offset.dy.floor();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TerrainTile &&
+          runtimeType == other.runtimeType &&
+          x == other.x &&
+          y == other.y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
+}
+
+class TerrainMap implements Graph<TerrainTile> {
+  final Grid<bool> _barriers;
+
+  TerrainMap(this._barriers);
+
+  @override
+  Iterable<TerrainTile> get allNodes {
+    return _barriers.allPositions
+        .where((e) => !_barriers.get(e)!)
+        .map((e) => TerrainTile(e.x, e.y));
+  }
+
+  @override
+  num getDistance(TerrainTile a, TerrainTile b) =>
+      (b.x - a.x).abs() + (b.y - a.y).abs();
+
+  @override
+  num getHeuristicDistance(TerrainTile a, TerrainTile b) => getDistance(a, b);
+
+  @override
+  Iterable<TerrainTile> getNeighboursOf(TerrainTile node) {
+    final neighbours = <TerrainTile>[];
+    for (int i = -1; i <= 1; i++) {
+      for (int j = -1; j <= 1; j++) {
+        if (i == 0 && j == 0) {
+          continue;
+        }
+        if (i != 0 && j != 0) {
+          continue;
+        }
+        final x = node.x + i;
+        final y = node.y + j;
+        final isObstacle = _barriers.get(GridPosition(x, y));
+        if (isObstacle == null || isObstacle) {
+          continue;
+        }
+        neighbours.add(TerrainTile(x, y));
+      }
+    }
+    return neighbours;
+  }
+}
+
 class NavGrid {
   static const worldSize = ISize(100, 100);
 
-  final _barriers = Set<GridPosition>();
+  final _barriers = Grid<bool>.filled(worldSize, (position) => false);
 
   Iterable<Offset> findPath(Offset start, Offset end) {
-    return AStar(
-      rows: worldSize.width,
-      columns: worldSize.height,
-      start: start,
-      end: end,
-      barriers: _barriers.map<Offset>((cell) => cell.toOffset()).toList(),
-    ).findThePath();
+    var map = TerrainMap(_barriers);
+    var pathFinder = AStar(map);
+    return pathFinder
+        .findPathSync(
+            TerrainTile.fromOffset(start), TerrainTile.fromOffset(end))
+        .map((e) => Offset(e.x.toDouble(), e.y.toDouble()));
   }
 
   void markNotPassable(Rect bounds) {
     final rect = getBoundingIntegerRect(bounds);
+    // print(rect);
     for (var x = rect.left; x <= rect.right; ++x) {
       for (var y = rect.top; y <= rect.bottom; ++y) {
-        _barriers.add(GridPosition(x, y));
+        _barriers.set(GridPosition(x, y), true);
       }
     }
   }
@@ -246,11 +323,13 @@ class Grid<T> {
 
   void set(GridPosition position, T cell) {
     if (position.y < 0 || position.y >= _cells.length) {
-      throw ArgumentError.value(position);
+      return;
+      // throw ArgumentError.value(position);
     }
     final row = _cells[position.y];
     if (position.x < 0 || position.x >= row.length) {
-      throw ArgumentError.value(position);
+      return;
+      // throw ArgumentError.value(position);
     }
     row[position.x] = cell;
   }
@@ -283,6 +362,20 @@ class Grid<T> {
   Iterable<List<T>> get cellsByRow => _cells;
 }
 
+class BarrierDebug extends RectangleComponent with HasGameRef<GameState> {
+  @override
+  void render(Canvas canvas) {
+    var barriers = gameRef.grid._barriers;
+    var passable = Paint()..color = const Color.fromARGB(128, 0, 255, 0);
+    var obstacle = Paint()..color = const Color.fromARGB(128, 255, 0, 0);
+
+    for (var position in barriers.allPositions) {
+      var paint = barriers.get(position)! ? obstacle : passable;
+      canvas.drawRect(position.toOffset() & const Size(1.0, 1.0), paint);
+    }
+  }
+}
+
 class GameState extends FlameGame {
   late Objective objective;
   final NavGrid grid = NavGrid();
@@ -295,6 +388,7 @@ class GameState extends FlameGame {
       ..anchor = Anchor.bottomCenter;
     add(objective);
     addBarriers();
+    add(BarrierDebug());
     startWave();
   }
 
@@ -320,15 +414,12 @@ class GameState extends FlameGame {
           ..position = position
           ..anchor = Anchor.center,
     ];
-    for (var barrier in barriers) {
-      grid.markNotPassable(barrier.size.toRect());
-    }
     addAll(barriers);
   }
 
   void startWave() {
     addAll([
-      for (var position in _generateAttackerPositions(10))
+      for (var position in _generateAttackerPositions(1))
         Attacker()
           ..position = position
           ..anchor = Anchor.center,
