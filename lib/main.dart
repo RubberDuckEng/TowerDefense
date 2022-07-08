@@ -194,6 +194,10 @@ class TerrainTile extends Object with Node<TerrainTile> {
       : x = offset.dx.floor(),
         y = offset.dy.floor();
 
+  TerrainTile.fromGridPosition(GridPosition position)
+      : x = position.x,
+        y = position.y;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -207,22 +211,22 @@ class TerrainTile extends Object with Node<TerrainTile> {
 }
 
 class TerrainMap implements Graph<TerrainTile> {
-  final Grid<TerrainTile?> _nodes;
+  final Grid<TerrainTile?> _tiles;
 
-  static Grid<TerrainTile?> _toNodes(Grid<bool> barriers) {
+  static Grid<TerrainTile?> _toTiles(Grid<bool> barriers) {
     return Grid<TerrainTile?>.filled(barriers.size, (position) {
       if (!barriers.get(position)!) {
-        return TerrainTile(position.x, position.y);
+        return TerrainTile.fromGridPosition(position);
       }
       return null;
     });
   }
 
-  TerrainMap(Grid<bool> barriers) : _nodes = _toNodes(barriers);
+  TerrainMap(Grid<bool> barriers) : _tiles = _toTiles(barriers);
 
   @override
   Iterable<TerrainTile> get allNodes {
-    return _nodes.cells.whereType<TerrainTile>();
+    return _tiles.cells.whereType<TerrainTile>();
   }
 
   @override
@@ -242,7 +246,7 @@ class TerrainMap implements Graph<TerrainTile> {
         }
         final x = node.x + i;
         final y = node.y + j;
-        final neighbor = _nodes.get(GridPosition(x, y));
+        final neighbor = _tiles.get(GridPosition(x, y));
         if (neighbor != null) {
           neighbours.add(neighbor);
         }
@@ -392,7 +396,7 @@ class GameState extends FlameGame {
       ..position = Vector2(size.x / 2, size.y - 1)
       ..anchor = Anchor.bottomCenter;
     add(objective);
-    add(BarrierDebug());
+    // add(BarrierDebug());
     startWave();
   }
 
@@ -423,7 +427,7 @@ class GameState extends FlameGame {
 
   void startWave() {
     addAll([
-      for (var position in _generateAttackerPositions(1))
+      for (var position in _generateAttackerPositions(50))
         Attacker()
           ..position = position
           ..anchor = Anchor.center,
