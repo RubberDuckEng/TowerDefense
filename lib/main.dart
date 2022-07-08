@@ -92,8 +92,7 @@ class Barrier extends RectangleComponent with HasGameRef<GameState> {
   @override
   void onMount() {
     super.onMount();
-    gameRef.grid
-        .markNotPassable(Rect.fromLTWH(position.x, position.y, size.x, size.y));
+    gameRef.grid.markNotPassable(toRect());
   }
 
   @override
@@ -208,15 +207,22 @@ class TerrainTile extends Object with Node<TerrainTile> {
 }
 
 class TerrainMap implements Graph<TerrainTile> {
-  final Grid<bool> _barriers;
+  final Grid<TerrainTile?> _nodes;
 
-  TerrainMap(this._barriers);
+  static Grid<TerrainTile?> _toNodes(Grid<bool> barriers) {
+    return Grid<TerrainTile?>.filled(barriers.size, (position) {
+      if (!barriers.get(position)!) {
+        return TerrainTile(position.x, position.y);
+      }
+      return null;
+    });
+  }
+
+  TerrainMap(Grid<bool> barriers) : _nodes = _toNodes(barriers);
 
   @override
   Iterable<TerrainTile> get allNodes {
-    return _barriers.allPositions
-        .where((e) => !_barriers.get(e)!)
-        .map((e) => TerrainTile(e.x, e.y));
+    return _nodes.cells.whereType<TerrainTile>();
   }
 
   @override
@@ -234,16 +240,12 @@ class TerrainMap implements Graph<TerrainTile> {
         if (i == 0 && j == 0) {
           continue;
         }
-        if (i != 0 && j != 0) {
-          continue;
-        }
         final x = node.x + i;
         final y = node.y + j;
-        final isObstacle = _barriers.get(GridPosition(x, y));
-        if (isObstacle == null || isObstacle) {
-          continue;
+        final neighbor = _nodes.get(GridPosition(x, y));
+        if (neighbor != null) {
+          neighbours.add(neighbor);
         }
-        neighbours.add(TerrainTile(x, y));
       }
     }
     return neighbours;
@@ -344,6 +346,8 @@ class Grid<T> {
     return _get(position);
   }
 
+  T? operator [](GridPosition position) => get(position);
+
   T _get(GridPosition position) {
     final row = _cells[position.y];
     return row[position.x];
@@ -370,7 +374,7 @@ class BarrierDebug extends RectangleComponent with HasGameRef<GameState> {
     var obstacle = Paint()..color = const Color.fromARGB(128, 255, 0, 0);
 
     for (var position in barriers.allPositions) {
-      var paint = barriers.get(position)! ? obstacle : passable;
+      var paint = barriers[position]! ? obstacle : passable;
       canvas.drawRect(position.toOffset() & const Size(1.0, 1.0), paint);
     }
   }
@@ -383,11 +387,11 @@ class GameState extends FlameGame {
   @override
   Future<void> onLoad() async {
     camera.viewport = FixedResolutionViewport(Vector2.all(100.0));
+    addBarriers();
     objective = Objective()
       ..position = Vector2(size.x / 2, size.y - 1)
       ..anchor = Anchor.bottomCenter;
     add(objective);
-    addBarriers();
     add(BarrierDebug());
     startWave();
   }
