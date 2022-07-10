@@ -6,7 +6,7 @@ import 'package:flame/game.dart';
 import 'package:flame/collisions.dart';
 import 'package:flame/extensions.dart';
 
-import 'package:a_star/a_star.dart';
+import 'package:astar/astar_2d.dart';
 
 void main() {
   runApp(const MyApp());
@@ -184,76 +184,8 @@ IRect getBoundingIntegerRect(Rect rect) {
   );
 }
 
-class TerrainTile extends Object with Node<TerrainTile> {
-  final int x;
-  final int y;
-
-  TerrainTile(this.x, this.y);
-
-  TerrainTile.fromOffset(Offset offset)
-      : x = offset.dx.floor(),
-        y = offset.dy.floor();
-
-  TerrainTile.fromGridPosition(GridPosition position)
-      : x = position.x,
-        y = position.y;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is TerrainTile &&
-          runtimeType == other.runtimeType &&
-          x == other.x &&
-          y == other.y;
-
-  @override
-  int get hashCode => Object.hash(x, y);
-}
-
-class TerrainMap implements Graph<TerrainTile> {
-  final Grid<TerrainTile?> _tiles;
-
-  static Grid<TerrainTile?> _toTiles(Grid<bool> barriers) {
-    return Grid<TerrainTile?>.filled(barriers.size, (position) {
-      if (!barriers.get(position)!) {
-        return TerrainTile.fromGridPosition(position);
-      }
-      return null;
-    });
-  }
-
-  TerrainMap(Grid<bool> barriers) : _tiles = _toTiles(barriers);
-
-  @override
-  Iterable<TerrainTile> get allNodes {
-    return _tiles.cells.whereType<TerrainTile>();
-  }
-
-  @override
-  num getDistance(TerrainTile a, TerrainTile b) =>
-      (b.x - a.x).abs() + (b.y - a.y).abs();
-
-  @override
-  num getHeuristicDistance(TerrainTile a, TerrainTile b) => getDistance(a, b);
-
-  @override
-  Iterable<TerrainTile> getNeighboursOf(TerrainTile node) {
-    final neighbours = <TerrainTile>[];
-    for (int i = -1; i <= 1; i++) {
-      for (int j = -1; j <= 1; j++) {
-        if (i == 0 && j == 0) {
-          continue;
-        }
-        final x = node.x + i;
-        final y = node.y + j;
-        final neighbor = _tiles.get(GridPosition(x, y));
-        if (neighbor != null) {
-          neighbours.add(neighbor);
-        }
-      }
-    }
-    return neighbours;
-  }
+Location getLocation(Offset offset) {
+  return Location(offset.dx.toInt(), offset.dy.toInt());
 }
 
 class NavGrid {
@@ -261,13 +193,14 @@ class NavGrid {
 
   final _barriers = Grid<bool>.filled(worldSize, (position) => false);
 
+  bool isPassable(int x, y) => !(_barriers.get(GridPosition(x, y)) ?? true);
+
   Iterable<Offset> findPath(Offset start, Offset end) {
-    var map = TerrainMap(_barriers);
-    var pathFinder = AStar(map);
-    return pathFinder
-        .findPathSync(
-            TerrainTile.fromOffset(start), TerrainTile.fromOffset(end))
-        .map((e) => Offset(e.x.toDouble(), e.y.toDouble()));
+    final pathFinder =
+        PathFinder2D(isPassable: isPassable, allowDiagonal: false);
+    final path =
+        pathFinder.findPath(getLocation(start), getLocation(end)) ?? [];
+    return path.map((e) => Offset(e.x.toDouble(), e.y.toDouble()));
   }
 
   void markNotPassable(Rect bounds) {
