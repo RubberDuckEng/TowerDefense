@@ -5,6 +5,9 @@ import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame/collisions.dart';
 import 'package:flame/extensions.dart';
+import 'package:flame_forge2d/body_component.dart';
+import 'package:flame_forge2d/forge2d_game.dart';
+import 'package:forge2d/forge2d.dart';
 
 import 'nav_grid.dart';
 
@@ -24,25 +27,34 @@ class Objective extends RectangleComponent {
   }
 }
 
-class Barrier extends RectangleComponent with HasGameRef<GameState> {
+class Barrier extends BodyComponent<GameState> {
   static final _paint = Paint()..color = Colors.blue.shade400;
 
-  Barrier() {
-    width = 2;
-    height = 2;
-    add(RectangleHitbox());
-  }
+  Vector2 position;
+  Vector2 size;
+
+  Barrier()
+      : position = Vector2.zero(),
+        size = Vector2.all(2),
+        super(paint: _paint);
 
   @override
   void onMount() {
     super.onMount();
-    gameRef.grid.markNotPassable(toRect());
+    gameRef.grid.markNotPassable(Rect.fromCenter(
+        center: Offset(position.x, position.y), width: size.x, height: size.y));
   }
 
   @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    canvas.drawRect(size.toRect(), _paint);
+  Body createBody() {
+    final bodyDef = BodyDef(
+      type: BodyType.static,
+      position: position,
+    );
+    final body = world.createBody(bodyDef);
+    final shape = PolygonShape()..setAsBoxXY(size.x / 2, size.y / 2);
+    body.createFixtureFromShape(shape);
+    return body;
   }
 }
 
@@ -116,13 +128,15 @@ class BarrierDebug extends RectangleComponent with HasGameRef<GameState> {
   }
 }
 
-class GameState extends FlameGame {
+class GameState extends Forge2DGame {
   late Objective objective;
   final NavGrid grid = NavGrid();
 
+  GameState() : super(gravity: Vector2.zero());
+
   @override
   Future<void> onLoad() async {
-    camera.viewport = FixedResolutionViewport(Vector2.all(100.0));
+    camera.viewport = FixedResolutionViewport(Vector2.all(1000.0));
     addBarriers();
     objective = Objective()
       ..position = Vector2(size.x / 2, size.y - 1)
@@ -150,9 +164,7 @@ class GameState extends FlameGame {
   void addBarriers() {
     final barriers = [
       for (var position in _generateBarrierPositions(100))
-        Barrier()
-          ..position = position
-          ..anchor = Anchor.center,
+        Barrier()..position = position
     ];
     addAll(barriers);
   }
