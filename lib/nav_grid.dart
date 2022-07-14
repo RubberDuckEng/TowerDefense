@@ -1,115 +1,64 @@
-import 'package:flame/extensions.dart';
+import 'dart:typed_data';
 
 import 'package:astar/astar_2d.dart';
+import 'package:flame/extensions.dart';
+import 'package:flutter/painting.dart';
 
 import 'geometry.dart';
 
-Location getLocation(Offset offset) {
+Location _getLocation(Offset offset) {
   return Location(offset.dx.toInt(), offset.dy.toInt());
 }
 
 class NavGrid {
   static const worldSize = ISize(100, 100);
 
-  final barriers = Grid<bool>.filled(worldSize, (position) => false);
+  final Grid barriers = Grid.zeroed(worldSize);
 
-  bool isPassable(int x, y) => !(barriers.get(GridPosition(x, y)) ?? true);
+  bool isPassable(int x, y) => !(barriers.get(x, y) ?? true);
 
   Iterable<Offset> findPath(Offset start, Offset end) {
     final pathFinder =
         PathFinder2D(isPassable: isPassable, allowDiagonal: false);
     final path =
-        pathFinder.findPath(getLocation(start), getLocation(end)) ?? [];
+        pathFinder.findPath(_getLocation(start), _getLocation(end)) ?? [];
     return path.map((e) => Offset(e.x.toDouble(), e.y.toDouble()));
   }
 
   void markNotPassable(Rect bounds) {
     final rect = getBoundingIntegerRect(bounds);
-    // print(rect);
     for (var x = rect.left; x <= rect.right; ++x) {
       for (var y = rect.top; y <= rect.bottom; ++y) {
-        barriers.set(GridPosition(x, y), true);
+        barriers.set(x, y, true);
       }
     }
   }
 }
 
-class GridPosition {
-  final int x;
-  final int y;
+class Grid {
+  final ISize size;
+  final Uint8List _data;
 
-  const GridPosition(this.x, this.y);
+  Grid.zeroed(this.size) : _data = Uint8List(size.width * size.height);
 
-  static const zero = GridPosition(0, 0);
+  int get width => size.width;
+  int get height => size.height;
 
-  Offset toOffset() => Offset(x.toDouble(), y.toDouble());
+  int _getIndex(int x, int y) => x + y * width;
+  int _encoded(bool value) => value ? 1 : 0;
+  bool _decode(int value) => value != 0;
 
-  @override
-  bool operator ==(other) {
-    if (other is! GridPosition) {
-      return false;
+  void set(int x, int y, bool value) {
+    if (x < 0 || x >= width || y < 0 || y >= height) {
+      return;
     }
-    return x == other.x && y == other.y;
+    _data[_getIndex(x, y)] = _encoded(value);
   }
 
-  @override
-  int get hashCode => Object.hash(x, y);
-}
-
-class Grid<T> {
-  final List<List<T>> _cells;
-
-  const Grid(this._cells);
-
-  Grid.filled(ISize size, T Function(GridPosition position) create)
-      : _cells = List.generate(
-            size.height,
-            (y) =>
-                List.generate(size.width, (x) => create(GridPosition(x, y))));
-
-  ISize get size => ISize(width, height);
-  int get width => _cells.first.length;
-  int get height => _cells.length;
-
-  void set(GridPosition position, T cell) {
-    if (position.y < 0 || position.y >= _cells.length) {
-      return;
-      // throw ArgumentError.value(position);
-    }
-    final row = _cells[position.y];
-    if (position.x < 0 || position.x >= row.length) {
-      return;
-      // throw ArgumentError.value(position);
-    }
-    row[position.x] = cell;
-  }
-
-  T? get(GridPosition position) {
-    if (position.x < 0 || position.x >= width) {
+  bool? get(int x, int y) {
+    if (x < 0 || x >= width || y < 0 || y >= height) {
       return null;
     }
-    if (position.y < 0 || position.y >= height) {
-      return null;
-    }
-    return _get(position);
+    return _decode(_data[_getIndex(x, y)]);
   }
-
-  T? operator [](GridPosition position) => get(position);
-
-  T _get(GridPosition position) {
-    final row = _cells[position.y];
-    return row[position.x];
-  }
-
-  Iterable<GridPosition> get allPositions sync* {
-    for (int x = 0; x < width; x++) {
-      for (int y = 0; y < height; y++) {
-        yield GridPosition(x, y);
-      }
-    }
-  }
-
-  Iterable<T> get cells => allPositions.map((position) => _get(position));
-
-  Iterable<List<T>> get cellsByRow => _cells;
 }
