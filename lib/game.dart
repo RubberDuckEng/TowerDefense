@@ -122,7 +122,8 @@ class BarrierDebug extends RectangleComponent with HasGameRef<GameState> {
     for (int y = 0; y < barriers.height; ++y) {
       for (int x = 0; x < barriers.width; ++x) {
         var paint = barriers.get(x, y)! ? obstacle : passable;
-        canvas.drawRect(position.toOffset() & const Size(1.0, 1.0), paint);
+        canvas.drawRect(
+            Offset(x.toDouble(), y.toDouble()) & const Size(0.9, 0.9), paint);
       }
     }
   }

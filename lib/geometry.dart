@@ -19,15 +19,6 @@ class IRect {
   }
 }
 
-IRect getBoundingIntegerRect(Rect rect) {
-  return IRect(
-    left: rect.left.floor(),
-    right: rect.right.ceil(),
-    top: rect.top.floor(),
-    bottom: rect.bottom.ceil(),
-  );
-}
-
 class ISize {
   final int width;
   final int height;

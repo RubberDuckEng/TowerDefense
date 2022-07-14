@@ -6,6 +6,15 @@ import 'package:flutter/painting.dart';
 
 import 'geometry.dart';
 
+IRect _getBoundingIntegerRect(Rect rect) {
+  return IRect(
+    left: rect.left.floor(),
+    right: rect.right.floor(),
+    top: rect.top.floor(),
+    bottom: rect.bottom.floor(),
+  );
+}
+
 Location _getLocation(Offset offset) {
   return Location(offset.dx.toInt(), offset.dy.toInt());
 }
@@ -26,7 +35,7 @@ class NavGrid {
   }
 
   void markNotPassable(Rect bounds) {
-    final rect = getBoundingIntegerRect(bounds);
+    final rect = _getBoundingIntegerRect(bounds);
     for (var x = rect.left; x <= rect.right; ++x) {
       for (var y = rect.top; y <= rect.bottom; ++y) {
         barriers.set(x, y, true);
