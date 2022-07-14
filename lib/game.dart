@@ -30,13 +30,10 @@ class Objective extends RectangleComponent {
 class Barrier extends BodyComponent<GameState> {
   static final _paint = Paint()..color = Colors.blue.shade400;
 
-  Vector2 position;
-  Vector2 size;
+  Vector2 position = Vector2.zero();
+  Vector2 size = Vector2.all(2);
 
-  Barrier()
-      : position = Vector2.zero(),
-        size = Vector2.all(2),
-        super(paint: _paint);
+  Barrier() : super(paint: _paint);
 
   @override
   void onMount() {
@@ -58,23 +55,23 @@ class Barrier extends BodyComponent<GameState> {
   }
 }
 
-class Attacker extends RectangleComponent with HasGameRef<GameState> {
+class Attacker extends BodyComponent<GameState> {
   static final _paint = Paint()..color = Colors.red.shade400;
 
-  final double _speed = 5.0;
+  final double _speed = 2.0;
 
   double closeEnough = 0.1;
   List<Offset> waypoints = [];
 
-  Attacker() {
-    width = 1;
-    height = 1;
-    add(CircleHitbox());
-  }
+  Vector2 initialPosition = Vector2.zero();
+
+  Attacker() : super(paint: _paint);
+
+  Vector2 get objective => gameRef.objective.center;
 
   @override
   void onMount() {
-    moveTo(gameRef.objective.center.toOffset());
+    moveTo(objective.toOffset());
   }
 
   void moveTo(Offset target) {
@@ -90,25 +87,35 @@ class Attacker extends RectangleComponent with HasGameRef<GameState> {
 
   @override
   void update(double dt) {
-    var objective = getNextWaypoint();
-    if (objective == null) {
-      return;
-    }
-    if (center.distanceTo(objective) < closeEnough) {
-      waypoints.removeAt(0);
-      objective = getNextWaypoint();
-      if (objective == null) {
-        return;
-      }
-    }
-    final delta = objective - center;
-    center += delta.normalized() * _speed * dt;
+    super.update(dt);
+    // var nextWaypoint = getNextWaypoint();
+    // if (nextWaypoint == null) {
+    //   return;
+    // }
+    // final center = this.center;
+    // if (center.distanceTo(nextWaypoint) < closeEnough) {
+    //   waypoints.removeAt(0);
+    //   nextWaypoint = getNextWaypoint();
+    //   if (nextWaypoint == null) {
+    //     return;
+    //   }
+    // }
+    final force = objective - center
+      ..normalize()
+      ..scale(_speed);
+    body.applyForce(force);
   }
 
   @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    canvas.drawCircle(Offset.zero, width / 2, _paint);
+  Body createBody() {
+    final bodyDef = BodyDef(
+      type: BodyType.dynamic,
+      position: initialPosition,
+    );
+    final body = world.createBody(bodyDef);
+    final shape = CircleShape()..radius = 0.5;
+    body.createFixtureFromShape(shape, 1.0);
+    return body;
   }
 }
 
@@ -173,9 +180,7 @@ class GameState extends Forge2DGame {
   void startWave() {
     addAll([
       for (var position in _generateAttackerPositions(50))
-        Attacker()
-          ..position = position
-          ..anchor = Anchor.center,
+        Attacker()..initialPosition = position,
     ]);
   }
 }
