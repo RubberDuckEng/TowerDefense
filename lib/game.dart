@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flame/input.dart';
 import 'package:flutter/material.dart';
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
@@ -56,16 +57,17 @@ class Barrier extends BodyComponent<GameState> {
 }
 
 class Attacker extends BodyComponent<GameState> {
-  static final _paint = Paint()..color = Colors.red.shade400;
+  static final _acceleratingPaint = Paint()..color = Colors.red.shade400;
+  static final _breakingPaint = Paint()..color = Colors.green.shade400;
 
-  final double _speed = 2.0;
+  final double _acceleration = 2.0; // m / (s*s)
 
   double closeEnough = 0.1;
   List<Offset> waypoints = [];
 
   Vector2 initialPosition = Vector2.zero();
 
-  Attacker() : super(paint: _paint);
+  Attacker() : super(paint: _acceleratingPaint);
 
   Vector2 get objective => gameRef.objective.center;
 
@@ -100,9 +102,56 @@ class Attacker extends BodyComponent<GameState> {
     //     return;
     //   }
     // }
-    final force = objective - center
-      ..normalize()
-      ..scale(_speed);
+
+    // Distance to objective
+    final vectorToObjective = objective - center;
+    final distanceToObjective = vectorToObjective.length;
+    // Current Speed
+    final currentSpeed = body.linearVelocity.length;
+
+    final timeToObjective = distanceToObjective / currentSpeed;
+
+    // distance(t) = v * t + (a * t * t) / 2
+    // velocity(t) = v + a * t
+    // accleration(t) = a
+
+    // d = v * t + (a * t * t) / 2
+
+    // 0 = (a / 2) * t * t + v * t - d
+
+    // DEPLOY THE QUADRATIC EQUATION (with efg instead of abc)
+    // ex² + fx + g = 0
+    // x = [-f ± √(f² - 4eg)]/2e
+
+    // e = (a / 2)
+    // f = v
+    // g = -d
+
+    // x = (-v ± math.sqrt(v*v - 4 * (a/2)(-d))) / 2(a/2)
+
+    // t = (math.sqrt(v*v + 2 * a * d) - v) / a
+
+    final timeToBreak = ((math.sqrt(currentSpeed * currentSpeed +
+                2 * _acceleration * distanceToObjective) +
+            currentSpeed)) /
+        _acceleration;
+
+    // print(
+    //     "timeToBreak=$timeToBreak timeToObjective=$timeToObjective currentSpeed=$currentSpeed");
+
+    var force;
+    if (timeToBreak > timeToObjective) {
+      // Breaking
+      paint = _breakingPaint;
+      force = body.linearVelocity.normalized()..scale(-_acceleration);
+      // print('breaking');
+    } else {
+      // Accelerating
+      paint = _acceleratingPaint;
+      force = vectorToObjective
+        ..normalize()
+        ..scale(_acceleration);
+    }
     body.applyForce(force);
   }
 
@@ -136,7 +185,7 @@ class BarrierDebug extends RectangleComponent with HasGameRef<GameState> {
   }
 }
 
-class GameState extends Forge2DGame {
+class GameState extends Forge2DGame with TapDetector {
   late Objective objective;
   final NavGrid grid = NavGrid();
 
@@ -175,6 +224,12 @@ class GameState extends Forge2DGame {
         Barrier()..position = position
     ];
     addAll(barriers);
+  }
+
+  @override
+  void onTapUp(TapUpInfo info) {
+    objective.center = info.eventPosition.game;
+    super.onTapUp(info);
   }
 
   void startWave() {
