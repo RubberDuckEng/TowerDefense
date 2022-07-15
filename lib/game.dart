@@ -4,7 +4,6 @@ import 'package:flame/input.dart';
 import 'package:flutter/material.dart';
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
-import 'package:flame/collisions.dart';
 import 'package:flame/extensions.dart';
 import 'package:flame_forge2d/body_component.dart';
 import 'package:flame_forge2d/forge2d_game.dart';
@@ -12,19 +11,29 @@ import 'package:forge2d/forge2d.dart';
 
 import 'nav_grid.dart';
 
-class Objective extends RectangleComponent {
-  static final _paint = Paint()..color = Colors.orange.shade400;
+final playerMovableDef = MovableDef(
+  acceleration: 4.0,
+  drag: 0.2,
+  debugAcceleratingPaint: Paint()..color = Colors.yellow.shade400,
+  debugBreakingPaint: Paint()..color = Colors.green.shade400,
+);
 
-  Objective() {
-    width = 2;
-    height = 2;
-    add(CircleHitbox());
-  }
+class Player extends Movable {
+  Player() : super(movableDef: playerMovableDef);
 
   @override
-  void render(Canvas canvas) {
-    super.render(canvas);
-    canvas.drawCircle(Offset.zero, width / 2, _paint);
+  Vector2 objective = Vector2.zero();
+
+  @override
+  Body createBody() {
+    final bodyDef = BodyDef(
+      type: BodyType.dynamic,
+      position: initialPosition,
+    );
+    final body = world.createBody(bodyDef);
+    final shape = CircleShape()..radius = 2.0;
+    body.createFixtureFromShape(shape, 0.1);
+    return body;
   }
 }
 
@@ -56,53 +65,36 @@ class Barrier extends BodyComponent<GameState> {
   }
 }
 
-class Attacker extends BodyComponent<GameState> {
-  static final _acceleratingPaint = Paint()..color = Colors.red.shade400;
-  static final _breakingPaint = Paint()..color = Colors.green.shade400;
+class MovableDef {
+  final double acceleration; // m / (s*s)
+  final double drag; // 1 / s
 
-  final double _acceleration = 2.0; // m / (s*s)
-  final double _drag = 0.2; // m / s
+  final Paint debugAcceleratingPaint;
+  final Paint debugBreakingPaint;
 
-  double closeEnough = 0.1;
-  List<Offset> waypoints = [];
+  const MovableDef({
+    required this.acceleration,
+    required this.drag,
+    required this.debugAcceleratingPaint,
+    required this.debugBreakingPaint,
+  });
+}
+
+abstract class Movable extends BodyComponent<GameState> {
+  final MovableDef movableDef;
 
   Vector2 initialPosition = Vector2.zero();
 
-  Attacker() : super(paint: _acceleratingPaint);
+  Movable({required this.movableDef})
+      : super(paint: movableDef.debugAcceleratingPaint);
 
-  Vector2 get objective => gameRef.objective.center;
-
-  @override
-  void onMount() {
-    moveTo(objective.toOffset());
-  }
-
-  void moveTo(Offset target) {
-    waypoints = gameRef.grid.findPath(center.toOffset(), target).toList();
-  }
-
-  Vector2? getNextWaypoint() {
-    if (waypoints.isEmpty) {
-      return null;
-    }
-    return waypoints.first.toVector2();
-  }
+  // FIXME: This should be a chase() call on Movable.  Then movable can have
+  // waypoints and reset them when the chase target changes.
+  Vector2 get objective;
 
   @override
   void update(double dt) {
     super.update(dt);
-    // var nextWaypoint = getNextWaypoint();
-    // if (nextWaypoint == null) {
-    //   return;
-    // }
-    // final center = this.center;
-    // if (center.distanceTo(nextWaypoint) < closeEnough) {
-    //   waypoints.removeAt(0);
-    //   nextWaypoint = getNextWaypoint();
-    //   if (nextWaypoint == null) {
-    //     return;
-    //   }
-    // }
 
     final vectorToObjective = objective - center;
     final distanceToObjective = vectorToObjective.length;
@@ -114,22 +106,36 @@ class Attacker extends BodyComponent<GameState> {
     // velocity(t) = v + a * t
     // accleration(t) = a
 
-    final timeToBreak = currentSpeed / _acceleration;
+    final timeToBreak = currentSpeed / movableDef.acceleration;
 
-    var force;
+    Vector2 force;
     if (timeToBreak > timeToObjective) {
-      paint = _breakingPaint;
-      force = body.linearVelocity.normalized()..scale(-_acceleration);
+      paint = movableDef.debugBreakingPaint;
+      force = body.linearVelocity.normalized()..scale(-movableDef.acceleration);
     } else {
-      paint = _acceleratingPaint;
+      paint = movableDef.debugAcceleratingPaint;
       force = vectorToObjective
         ..normalize()
-        ..scale(_acceleration);
+        ..scale(movableDef.acceleration);
       // Apply drag to converge to terminal velocity.
-      force += body.linearVelocity * -_drag;
+      force += body.linearVelocity * -movableDef.drag;
     }
     body.applyForce(force);
   }
+}
+
+final MovableDef attackerMovableDef = MovableDef(
+  acceleration: 2.0,
+  drag: 0.2,
+  debugAcceleratingPaint: Paint()..color = Colors.red.shade400,
+  debugBreakingPaint: Paint()..color = Colors.green.shade400,
+);
+
+class Attacker extends Movable {
+  Attacker() : super(movableDef: attackerMovableDef);
+
+  @override
+  Vector2 get objective => gameRef.player.center;
 
   @override
   Body createBody() {
@@ -162,7 +168,7 @@ class BarrierDebug extends RectangleComponent with HasGameRef<GameState> {
 }
 
 class GameState extends Forge2DGame with TapDetector {
-  late Objective objective;
+  late Player player;
   final NavGrid grid = NavGrid();
 
   GameState() : super(gravity: Vector2.zero());
@@ -170,11 +176,10 @@ class GameState extends Forge2DGame with TapDetector {
   @override
   Future<void> onLoad() async {
     camera.viewport = FixedResolutionViewport(Vector2.all(1000.0));
+    player = Player()..initialPosition = Vector2(size.x / 2, size.y / 2);
+    player.objective = player.initialPosition;
     addBarriers();
-    objective = Objective()
-      ..position = Vector2(size.x / 2, size.y - 1)
-      ..anchor = Anchor.bottomCenter;
-    add(objective);
+    add(player);
     // add(BarrierDebug());
     startWave();
   }
@@ -204,7 +209,7 @@ class GameState extends Forge2DGame with TapDetector {
 
   @override
   void onTapUp(TapUpInfo info) {
-    objective.center = info.eventPosition.game;
+    player.objective = info.eventPosition.game;
     super.onTapUp(info);
   }
 
