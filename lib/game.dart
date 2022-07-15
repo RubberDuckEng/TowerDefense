@@ -61,6 +61,7 @@ class Attacker extends BodyComponent<GameState> {
   static final _breakingPaint = Paint()..color = Colors.green.shade400;
 
   final double _acceleration = 2.0; // m / (s*s)
+  final double _drag = 0.2; // m / s
 
   double closeEnough = 0.1;
   List<Offset> waypoints = [];
@@ -103,10 +104,8 @@ class Attacker extends BodyComponent<GameState> {
     //   }
     // }
 
-    // Distance to objective
     final vectorToObjective = objective - center;
     final distanceToObjective = vectorToObjective.length;
-    // Current Speed
     final currentSpeed = body.linearVelocity.length;
 
     final timeToObjective = distanceToObjective / currentSpeed;
@@ -115,48 +114,19 @@ class Attacker extends BodyComponent<GameState> {
     // velocity(t) = v + a * t
     // accleration(t) = a
 
-    // 0 = v + a * t
-    // -v = a * t
-    // t = -v / a
-
-    // d = v * t + (a * t * t) / 2
-
-    // 0 = (a / 2) * t * t + v * t - d
-
-    // DEPLOY THE QUADRATIC EQUATION (with efg instead of abc)
-    // ex² + fx + g = 0
-    // x = [-f ± √(f² - 4eg)]/2e
-
-    // e = (a / 2)
-    // f = v
-    // g = -d
-
-    // x = (-v ± math.sqrt(v*v - 4 * (a/2)(-d))) / 2(a/2)
-
-    // t = (math.sqrt(v*v + 2 * a * d) - v) / a
-
-    // final timeToBreak = ((math.sqrt(currentSpeed * currentSpeed +
-    //             2 * _acceleration * distanceToObjective) +
-    //         currentSpeed)) /
-    //     _acceleration;
-
     final timeToBreak = currentSpeed / _acceleration;
-
-    // print(
-    //     "timeToBreak=$timeToBreak timeToObjective=$timeToObjective currentSpeed=$currentSpeed");
 
     var force;
     if (timeToBreak > timeToObjective) {
-      // Breaking
       paint = _breakingPaint;
       force = body.linearVelocity.normalized()..scale(-_acceleration);
-      // print('breaking');
     } else {
-      // Accelerating
       paint = _acceleratingPaint;
       force = vectorToObjective
         ..normalize()
         ..scale(_acceleration);
+      // Apply drag to converge to terminal velocity.
+      force += body.linearVelocity * -_drag;
     }
     body.applyForce(force);
   }
