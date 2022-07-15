@@ -40,7 +40,7 @@ dependencies:
   astar:
     git:
       url: https://github.com/abarth/astar.git
-      ref: b3895f5fe55030176f0aeece09a15c103fd53451
+      ref: e3800e35b6fa344c13db5140bd452dbb4d40c62d
 
 dev_dependencies:
   flutter_test:
