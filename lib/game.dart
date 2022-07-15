@@ -115,6 +115,10 @@ class Attacker extends BodyComponent<GameState> {
     // velocity(t) = v + a * t
     // accleration(t) = a
 
+    // 0 = v + a * t
+    // -v = a * t
+    // t = -v / a
+
     // d = v * t + (a * t * t) / 2
 
     // 0 = (a / 2) * t * t + v * t - d
@@ -131,10 +135,12 @@ class Attacker extends BodyComponent<GameState> {
 
     // t = (math.sqrt(v*v + 2 * a * d) - v) / a
 
-    final timeToBreak = ((math.sqrt(currentSpeed * currentSpeed +
-                2 * _acceleration * distanceToObjective) +
-            currentSpeed)) /
-        _acceleration;
+    // final timeToBreak = ((math.sqrt(currentSpeed * currentSpeed +
+    //             2 * _acceleration * distanceToObjective) +
+    //         currentSpeed)) /
+    //     _acceleration;
+
+    final timeToBreak = currentSpeed / _acceleration;
 
     // print(
     //     "timeToBreak=$timeToBreak timeToObjective=$timeToObjective currentSpeed=$currentSpeed");
